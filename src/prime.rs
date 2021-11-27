@@ -4,7 +4,7 @@ use num_traits::{One, ToPrimitive, Zero};
 
 const MILLER_RABIN_ROUNDS: usize = 8;
 
-pub fn new_prime(n: usize) -> BigInt {
+pub fn gen(n: usize) -> BigInt {
     let mut rng = rand::thread_rng();
     let n = n.try_into().expect("can't fit usize in u64");
     loop {
@@ -268,19 +268,19 @@ mod tests {
 
     #[test]
     fn gen_check_64() {
-        let prime = new_prime(64);
+        let prime = gen(64);
         assert!(is_prime(&prime), "prime={}", prime);
     }
 
     #[test]
     fn gen_check_128() {
-        let prime = new_prime(128);
+        let prime = gen(128);
         assert!(is_prime(&prime), "prime={}", prime);
     }
 
     #[test]
     fn gen_check_256() {
-        let prime = new_prime(256);
+        let prime = gen(256);
         assert!(is_prime(&prime), "prime={}", prime);
     }
 
