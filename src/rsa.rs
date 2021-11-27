@@ -1,5 +1,6 @@
 use num_bigint::{BigInt, Sign};
 use num_traits::One;
+use serde::{Deserialize, Serialize};
 
 use crate::{prime, utils};
 
@@ -8,9 +9,16 @@ const EXP: u32 = 65537;
 const MIN_KEY_SIZE: usize = 64;
 const MAX_KEY_SIZE: usize = 16384;
 
+#[derive(Serialize, Deserialize)]
 pub struct RsaPrivate {
     d: BigInt,
     n: BigInt,
+}
+
+impl std::fmt::Debug for RsaPrivate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RsaPrivate").field("n", &self.n).finish()
+    }
 }
 
 impl RsaPrivate {
@@ -43,6 +51,7 @@ impl RsaPrivate {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RsaPublic {
     e: BigInt,
     n: BigInt,
