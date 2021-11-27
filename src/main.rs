@@ -5,11 +5,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use crypto::{
     prime,
     rsa::{RsaPrivate, RsaPublic},
 };
+use serde::{de::DeserializeOwned, Serialize};
 use structopt::StructOpt;
 
 #[derive(Debug, structopt::StructOpt)]
@@ -73,19 +74,17 @@ fn main() -> anyhow::Result<()> {
             RsaCmd::Gen { size, output } => {
                 let (public, private) = crypto::rsa::gen_pair(size.get())?;
 
-                let public_path = append_suffix(&output, ".public.json")?;
-                let private_path = append_suffix(&output, ".private.json")?;
+                let public_path = append_suffix(&output, ".public")?;
+                let private_path = append_suffix(&output, ".private")?;
 
-                let public_file = File::create(&public_path)?;
-                let private_file = File::create(&private_path)?;
+                File::create(&public_path)?.write_as_base64(&public)?;
+                File::create(&private_path)?.write_as_base64(&private)?;
 
-                serde_json::to_writer(public_file, &public)?;
-                serde_json::to_writer(private_file, &private)?;
                 eprintln!("Public key is saved to {:?}", &public_path);
                 eprintln!("Private key is saved to {:?}", &private_path);
             }
             RsaCmd::Encrypt { public } => {
-                let key: RsaPublic = serde_json::from_reader(File::open(public)?)?;
+                let key: RsaPublic = File::open(public)?.read_as_base64()?;
 
                 let mut msg = Vec::new();
                 std::io::stdin().read_to_end(&mut msg)?;
@@ -95,7 +94,7 @@ fn main() -> anyhow::Result<()> {
             }
 
             RsaCmd::Decrypt { private } => {
-                let key: RsaPrivate = serde_json::from_reader(File::open(private)?)?;
+                let key: RsaPrivate = File::open(private)?.read_as_base64()?;
 
                 let mut msg = Vec::new();
                 std::io::stdin().read_to_end(&mut msg)?;
@@ -118,4 +117,39 @@ fn append_suffix(path: &Path, suffix: &str) -> anyhow::Result<PathBuf> {
     name.push(suffix);
 
     Ok(path.with_file_name(name))
+}
+
+trait WriteAsBase64 {
+    fn write_as_base64<S: Serialize>(&mut self, s: &S) -> anyhow::Result<()>;
+}
+trait ReadAsBase64 {
+    fn read_as_base64<D: DeserializeOwned>(&mut self) -> anyhow::Result<D>;
+}
+
+impl<T> WriteAsBase64 for T
+where
+    T: Write,
+{
+    fn write_as_base64<S: Serialize>(&mut self, s: &S) -> anyhow::Result<()> {
+        let serialized = bincode::serialize(s)?;
+        let encoded = base64::encode(serialized);
+        self.write_all(encoded.as_bytes())?;
+        Ok(())
+    }
+}
+
+impl<T> ReadAsBase64 for T
+where
+    T: Read,
+{
+    fn read_as_base64<D>(&mut self) -> anyhow::Result<D>
+    where
+        D: DeserializeOwned,
+    {
+        let mut encoded = String::new();
+        self.read_to_string(&mut encoded)
+            .context("reading from the source")?;
+        let serialized = base64::decode(encoded).context("decoding base64")?;
+        bincode::deserialize(&serialized).context("deserializing")
+    }
 }
