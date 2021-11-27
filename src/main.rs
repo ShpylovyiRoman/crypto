@@ -1,11 +1,15 @@
 use std::{
     fs::File,
+    io::{Read, Write},
     num::NonZeroUsize,
     path::{Path, PathBuf},
 };
 
 use anyhow::anyhow;
-use crypto::prime;
+use crypto::{
+    prime,
+    rsa::{RsaPrivate, RsaPublic},
+};
 use structopt::StructOpt;
 
 #[derive(Debug, structopt::StructOpt)]
@@ -43,6 +47,16 @@ enum RsaCmd {
         #[structopt(long, short)]
         output: PathBuf,
     },
+
+    Encrypt {
+        #[structopt(long, short)]
+        public: PathBuf,
+    },
+
+    Decrypt {
+        #[structopt(long, short)]
+        private: PathBuf,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -69,6 +83,25 @@ fn main() -> anyhow::Result<()> {
                 serde_json::to_writer(private_file, &private)?;
                 eprintln!("Public key is saved to {:?}", &public_path);
                 eprintln!("Private key is saved to {:?}", &private_path);
+            }
+            RsaCmd::Encrypt { public } => {
+                let key: RsaPublic = serde_json::from_reader(File::open(public)?)?;
+
+                let mut msg = Vec::new();
+                std::io::stdin().read_to_end(&mut msg)?;
+
+                let encrypted = key.encrypt(&msg)?;
+                std::io::stdout().write_all(&encrypted)?;
+            }
+
+            RsaCmd::Decrypt { private } => {
+                let key: RsaPrivate = serde_json::from_reader(File::open(private)?)?;
+
+                let mut msg = Vec::new();
+                std::io::stdin().read_to_end(&mut msg)?;
+
+                let decrypted = key.decrypt(&msg)?;
+                std::io::stdout().write_all(&decrypted)?;
             }
         },
     }
