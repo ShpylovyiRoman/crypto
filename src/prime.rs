@@ -1,14 +1,14 @@
-use num_bigint::{BigUint, RandBigInt};
+use num_bigint::{BigInt, RandBigInt};
 use num_integer::Integer;
 use num_traits::{One, ToPrimitive, Zero};
 
 const MILLER_RABIN_ROUNDS: usize = 8;
 
-pub fn new_prime(n: u64) -> BigUint {
+pub fn new_prime(n: u64) -> BigInt {
     let mut rng = rand::thread_rng();
 
     loop {
-        let mut candidate: BigUint = rng.gen_biguint(n);
+        let mut candidate: BigInt = rng.gen_biguint(n).into();
 
         candidate.set_bit(0, true);
         candidate.set_bit(n - 1, true);
@@ -19,12 +19,12 @@ pub fn new_prime(n: u64) -> BigUint {
     }
 }
 
-pub fn is_prime(candidate: &BigUint) -> bool {
+pub fn is_prime(candidate: &BigInt) -> bool {
     is_prime_with_rounds(candidate, MILLER_RABIN_ROUNDS)
 }
 
-pub fn is_prime_with_rounds(candidate: &BigUint, rounds: usize) -> bool {
-    let two: BigUint = 2u32.into();
+pub fn is_prime_with_rounds(candidate: &BigInt, rounds: usize) -> bool {
+    let two: BigInt = 2u32.into();
 
     if candidate.is_zero() {
         return false;
@@ -45,7 +45,7 @@ pub fn is_prime_with_rounds(candidate: &BigUint, rounds: usize) -> bool {
     miller_rabin(candidate, rounds)
 }
 
-fn is_divisible_by_small_primes(numb: &BigUint) -> bool {
+fn is_divisible_by_small_primes(numb: &BigInt) -> bool {
     static SMALL_PRIMES: [u32; 2048] = [
         2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89,
         97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181,
@@ -200,9 +200,9 @@ fn is_divisible_by_small_primes(numb: &BigUint) -> bool {
     false
 }
 
-fn is_prime_by_fermat_theorem(prime: &BigUint) -> bool {
+fn is_prime_by_fermat_theorem(prime: &BigInt) -> bool {
     let mut rng = rand::thread_rng();
-    let random = rng.gen_biguint_below(prime);
+    let random = rng.gen_bigint_range(&BigInt::zero(), prime);
 
     let exponent = prime - 1u32;
 
@@ -211,8 +211,8 @@ fn is_prime_by_fermat_theorem(prime: &BigUint) -> bool {
     result.is_one()
 }
 
-fn miller_rabin(candidate: &BigUint, limit: usize) -> bool {
-    let two = BigUint::from(2u32);
+fn miller_rabin(candidate: &BigInt, limit: usize) -> bool {
+    let two = BigInt::from(2u32);
 
     if candidate == &two {
         return true;
@@ -224,7 +224,7 @@ fn miller_rabin(candidate: &BigUint, limit: usize) -> bool {
 
     let upper_bound = candidate - 1u32;
     'witness: for _ in 0..limit {
-        let a = rng.gen_biguint_range(&two, &upper_bound);
+        let a = rng.gen_bigint_range(&two, &upper_bound);
 
         let mut x = a.modpow(&d, candidate);
 
@@ -248,9 +248,9 @@ fn miller_rabin(candidate: &BigUint, limit: usize) -> bool {
     true
 }
 
-fn rewrite(n: &BigUint) -> (BigUint, BigUint) {
-    let two = BigUint::from(2u32);
-    let mut s = BigUint::zero();
+fn rewrite(n: &BigInt) -> (BigInt, BigInt) {
+    let two = BigInt::from(2u32);
+    let mut s = BigInt::zero();
 
     let mut d = n - 1u32;
 
@@ -302,7 +302,7 @@ mod tests {
         ];
 
         for prime in primes {
-            let prime: BigUint = prime.parse().unwrap();
+            let prime: BigInt = prime.parse().unwrap();
             assert!(is_prime(&prime), "prime={}", prime);
         }
     }
