@@ -1,6 +1,7 @@
 use num_bigint::{BigInt, Sign};
 use num_traits::One;
 use serde::{Deserialize, Serialize};
+use sha2::{digest::FixedOutput, Digest};
 
 use crate::{prime, utils};
 
@@ -13,6 +14,25 @@ const MAX_KEY_SIZE: usize = 16384;
 pub struct RsaPrivate {
     d: BigInt,
     n: BigInt,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RsaPublic {
+    e: BigInt,
+    n: BigInt,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
+pub struct RsaSignature {
+    num: BigInt,
+}
+
+impl std::fmt::Debug for RsaSignature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("RsaSignature")
+            .field(&format_args!("{:x}", self.num))
+            .finish()
+    }
 }
 
 impl std::fmt::Debug for RsaPrivate {
@@ -49,12 +69,41 @@ impl RsaPrivate {
             Ok(bytes[padd_end + 1..].into())
         }
     }
+
+    pub fn sign(&self, msg: &[u8]) -> anyhow::Result<RsaSignature> {
+        let bit_len = (self.n().bits() - 1)
+            .try_into()
+            .expect("cant convert u64 to usize");
+
+        let num = gen_padding(msg, bit_len);
+        let num = num.modpow(self.d(), self.n());
+        Ok(RsaSignature { num })
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RsaPublic {
-    e: BigInt,
-    n: BigInt,
+fn gen_padding(msg: &[u8], bit_len: usize) -> BigInt {
+    let mut hash = {
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(msg);
+        hasher.finalize_fixed()
+    };
+    let mut hash = hash.as_mut_slice();
+    mask(&mut hash, bit_len);
+    BigInt::from_bytes_be(Sign::Plus, hash)
+}
+
+fn mask(buff: &mut [u8], bit_len: usize) {
+    if buff.len() * 8 <= bit_len {
+        return;
+    }
+    let diff = buff.len() * 8 - bit_len;
+    let bytes = diff / 8;
+    let bits = 8 - diff % 8;
+    buff.iter_mut().take(bytes).for_each(|b| *b = 0);
+    if bits < 8 {
+        let mask = (1u8 << bits) - 1;
+        buff[bytes] &= mask;
+    }
 }
 
 impl RsaPublic {
@@ -81,6 +130,21 @@ impl RsaPublic {
         let encrypted = num.modpow(&self.e, &self.n);
         let (_sign, bytes) = encrypted.to_bytes_be();
         Ok(bytes)
+    }
+
+    pub fn verify(&self, msg: &[u8], sig: &RsaSignature) -> anyhow::Result<()> {
+        let bit_len = (self.n().bits() - 1)
+            .try_into()
+            .expect("cant convert u64 to usize");
+
+        let padding = gen_padding(msg, bit_len);
+
+        let num = sig.num.modpow(self.e(), self.n());
+        if num != padding {
+            anyhow::bail!("invalid signature")
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -180,5 +244,54 @@ mod tests {
         let decrypted = private.decrypt(&encrypted).unwrap();
 
         assert_eq!(decrypted, data)
+    }
+
+    #[test]
+    fn mask_test() {
+        let mut buff = [0xff, 0xff, 0xff, 0xff];
+        mask(&mut buff, 17);
+        assert_eq!(buff, [0x00, 0x01, 0xff, 0xff]);
+    }
+
+    #[test]
+    fn mask_multiple_of_8_test() {
+        let mut buff = [0xff, 0xff, 0xff, 0xff];
+        mask(&mut buff, 16);
+        assert_eq!(buff, [0x00, 0x00, 0xff, 0xff]);
+    }
+
+    #[test]
+    fn sign_verify_test() {
+        let (public, private) = gen_pair(256).unwrap();
+
+        let msg = b"It was me";
+
+        let sig = private.sign(msg).unwrap();
+
+        public.verify(msg, &sig).unwrap();
+    }
+
+    #[test]
+    fn sign_change_verify_test() {
+        let (public, private) = gen_pair(256).unwrap();
+
+        let msg = b"It was me";
+
+        let mut sig = private.sign(msg).unwrap();
+        sig.num += 1;
+
+        public.verify(msg, &sig).unwrap_err();
+    }
+
+    #[test]
+    fn sign_verify_with_other_key_test() {
+        let (_, private) = gen_pair(256).unwrap();
+        let (public, _) = gen_pair(256).unwrap();
+
+        let msg = b"It was me";
+
+        let sig = private.sign(msg).unwrap();
+
+        public.verify(msg, &sig).unwrap_err();
     }
 }
