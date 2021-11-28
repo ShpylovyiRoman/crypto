@@ -9,6 +9,7 @@ use anyhow::{anyhow, Context};
 use crypto::{
     prime,
     rsa::{RsaPrivate, RsaPublic, RsaSignature},
+    sym::{Cipher, Key},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use structopt::StructOpt;
@@ -28,6 +29,11 @@ enum Cmd {
     Rsa {
         #[structopt(subcommand)]
         subcmd: RsaCmd,
+    },
+
+    Sym {
+        #[structopt(subcommand)]
+        subcmd: SymCmd,
     },
 }
 
@@ -73,6 +79,19 @@ enum RsaCmd {
     },
 }
 
+#[derive(Debug, structopt::StructOpt)]
+enum SymCmd {
+    Enc {
+        #[structopt(long)]
+        pass: String,
+    },
+
+    Dec {
+        #[structopt(long)]
+        pass: String,
+    },
+}
+
 fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
 
@@ -99,8 +118,7 @@ fn main() -> anyhow::Result<()> {
             RsaCmd::Encrypt { public } => {
                 let key: RsaPublic = File::open(public)?.read_as_base64()?;
 
-                let mut msg = Vec::new();
-                stdin().read_to_end(&mut msg)?;
+                let msg = read_raw_stdin()?;
 
                 let encrypted = key.encrypt(&msg)?;
                 stdout().write_all(&encrypted)?;
@@ -109,8 +127,7 @@ fn main() -> anyhow::Result<()> {
             RsaCmd::Decrypt { private } => {
                 let key: RsaPrivate = File::open(private)?.read_as_base64()?;
 
-                let mut msg = Vec::new();
-                stdin().read_to_end(&mut msg)?;
+                let msg = read_raw_stdin()?;
 
                 let decrypted = key.decrypt(&msg)?;
                 stdout().write_all(&decrypted)?;
@@ -118,8 +135,7 @@ fn main() -> anyhow::Result<()> {
             RsaCmd::Sign { private } => {
                 let key: RsaPrivate = File::open(private)?.read_as_base64()?;
 
-                let mut msg = Vec::new();
-                stdin().read_to_end(&mut msg)?;
+                let msg = read_raw_stdin()?;
 
                 let sign = key.sign(&msg)?;
                 stdout().write_as_base64(&sign)?;
@@ -128,15 +144,40 @@ fn main() -> anyhow::Result<()> {
                 let key: RsaPublic = File::open(public)?.read_as_base64()?;
                 let sig: RsaSignature = File::open(sig)?.read_as_base64()?;
 
-                let mut msg = Vec::new();
-                stdin().read_to_end(&mut msg)?;
+                let msg = read_raw_stdin()?;
 
                 key.verify(&msg, &sig)?;
+            }
+        },
+        Cmd::Sym { subcmd } => match subcmd {
+            SymCmd::Enc { pass } => {
+                let key = Key::from_pass(&pass)?;
+                let cipher = Cipher::new(&key);
+
+                let msg = read_raw_stdin()?;
+
+                let encrypted = cipher.encrypt(&msg)?;
+                stdout().write_all(&encrypted)?;
+            }
+            SymCmd::Dec { pass } => {
+                let key = Key::from_pass(&pass)?;
+                let cipher = Cipher::new(&key);
+
+                let msg = read_raw_stdin()?;
+
+                let decrypted = cipher.decrypt(&msg)?;
+                stdout().write_all(&decrypted)?;
             }
         },
     }
 
     Ok(())
+}
+
+fn read_raw_stdin() -> anyhow::Result<Vec<u8>> {
+    let mut raw = Vec::new();
+    stdin().read_to_end(&mut raw)?;
+    Ok(raw)
 }
 
 fn append_suffix(path: &Path, suffix: &str) -> anyhow::Result<PathBuf> {
