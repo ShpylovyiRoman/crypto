@@ -3,11 +3,25 @@ use aes_gcm::{
     Aes256Gcm, Key as AesKey, Nonce, Tag,
 };
 use anyhow::anyhow;
+use argon2::{Config, ThreadMode, Variant, Version};
 use rand::Rng;
 
 pub const AES_KEY_LEN: usize = 32;
 const AES_NONCE_LEN: usize = 12;
 const AES_TAG_LEN: usize = 16;
+
+const ARGON_SALT: &[u8] = b"labs.security.kpi";
+const ARGON_CONFIG: Config = Config {
+    ad: &[],
+    hash_length: AES_KEY_LEN as u32,
+    lanes: 8,
+    mem_cost: 1 << 16,
+    secret: &[],
+    thread_mode: ThreadMode::Sequential,
+    time_cost: 4,
+    variant: Variant::Argon2i,
+    version: Version::Version13,
+};
 
 pub struct Cipher {
     cipher: Aes256Gcm,
@@ -43,6 +57,11 @@ impl Key {
                 AES_KEY_LEN
             )
         })?))
+    }
+
+    pub fn from_pass(pass: &str) -> anyhow::Result<Self> {
+        let key = argon2::hash_raw(pass.as_bytes(), ARGON_SALT, &ARGON_CONFIG)?;
+        Ok(Self(key.try_into().expect("length is ok")))
     }
 }
 
@@ -135,6 +154,20 @@ mod tests {
         let key = Key::random();
         let cipher = Cipher::new(&key);
         let msg = b"";
+
+        let encrypted = cipher.encrypt(msg).unwrap();
+        let decrypted = cipher.decrypt(&encrypted).unwrap();
+        assert_eq!(decrypted, msg);
+    }
+
+    #[test]
+    fn enc_dec_pass() {
+        let key =
+            Key::from_pass("grudging-synthetic-guacamole-stratus-grumbling-urethane").unwrap();
+
+        let cipher = Cipher::new(&key);
+
+        let msg = b"happy new year";
 
         let encrypted = cipher.encrypt(msg).unwrap();
         let decrypted = cipher.decrypt(&encrypted).unwrap();
