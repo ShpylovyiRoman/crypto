@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{stdin, stdout, Read, Write},
     num::NonZeroUsize,
     path::{Path, PathBuf},
 };
@@ -8,7 +8,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use crypto::{
     prime,
-    rsa::{RsaPrivate, RsaPublic},
+    rsa::{RsaPrivate, RsaPublic, RsaSignature},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use structopt::StructOpt;
@@ -58,6 +58,19 @@ enum RsaCmd {
         #[structopt(long, short)]
         private: PathBuf,
     },
+
+    Sign {
+        #[structopt(long, short)]
+        private: PathBuf,
+    },
+
+    Verify {
+        #[structopt(long, short)]
+        public: PathBuf,
+
+        #[structopt(long, short)]
+        sig: PathBuf,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -87,20 +100,38 @@ fn main() -> anyhow::Result<()> {
                 let key: RsaPublic = File::open(public)?.read_as_base64()?;
 
                 let mut msg = Vec::new();
-                std::io::stdin().read_to_end(&mut msg)?;
+                stdin().read_to_end(&mut msg)?;
 
                 let encrypted = key.encrypt(&msg)?;
-                std::io::stdout().write_all(&encrypted)?;
+                stdout().write_all(&encrypted)?;
             }
 
             RsaCmd::Decrypt { private } => {
                 let key: RsaPrivate = File::open(private)?.read_as_base64()?;
 
                 let mut msg = Vec::new();
-                std::io::stdin().read_to_end(&mut msg)?;
+                stdin().read_to_end(&mut msg)?;
 
                 let decrypted = key.decrypt(&msg)?;
-                std::io::stdout().write_all(&decrypted)?;
+                stdout().write_all(&decrypted)?;
+            }
+            RsaCmd::Sign { private } => {
+                let key: RsaPrivate = File::open(private)?.read_as_base64()?;
+
+                let mut msg = Vec::new();
+                stdin().read_to_end(&mut msg)?;
+
+                let sign = key.sign(&msg)?;
+                stdout().write_as_base64(&sign)?;
+            }
+            RsaCmd::Verify { public, sig } => {
+                let key: RsaPublic = File::open(public)?.read_as_base64()?;
+                let sig: RsaSignature = File::open(sig)?.read_as_base64()?;
+
+                let mut msg = Vec::new();
+                stdin().read_to_end(&mut msg)?;
+
+                key.verify(&msg, &sig)?;
             }
         },
     }
