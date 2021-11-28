@@ -15,6 +15,10 @@ use serde::{de::DeserializeOwned, Serialize};
 use structopt::StructOpt;
 
 #[derive(Debug, structopt::StructOpt)]
+/// Crypto tool for symmetric and asymmetric crypto operations, like key
+/// generation, encryption, signing, etc.
+///
+/// DO NOT USE IT: it's an educational project.
 struct Opt {
     #[structopt(subcommand)]
     cmd: Cmd,
@@ -22,15 +26,17 @@ struct Opt {
 
 #[derive(Debug, structopt::StructOpt)]
 enum Cmd {
+    /// Subcommand dedicated to operations with prime numbers.
     Prime {
         #[structopt(subcommand)]
         subcmd: PrimeCmd,
     },
+    /// Rsa key generation, encryption and signing.
     Rsa {
         #[structopt(subcommand)]
         subcmd: RsaCmd,
     },
-
+    /// Symmetric encryption
     Sym {
         #[structopt(subcommand)]
         subcmd: SymCmd,
@@ -39,7 +45,9 @@ enum Cmd {
 
 #[derive(Debug, structopt::StructOpt)]
 enum PrimeCmd {
+    /// Generates prime number with a specified bit length
     Gen {
+        /// Bit length of the prime. Too big values can took a lot of time.
         #[structopt(long, short)]
         size: NonZeroUsize,
     },
@@ -47,33 +55,52 @@ enum PrimeCmd {
 
 #[derive(Debug, structopt::StructOpt)]
 enum RsaCmd {
+    /// Generates new rsa keys with a specified length.
     Gen {
+        /// Bit length of the rsa keys.
         #[structopt(long, short)]
         size: NonZeroUsize,
 
+        /// Path for saving the keys.
         #[structopt(long, short)]
         output: PathBuf,
     },
 
+    /// Paddingless encryption with RSA. You should specify the public key.
+    /// The message comes into the stdin and encrypted ciphertext will come into
+    /// the stdout. The message should not be bigger than modulus.
     Encrypt {
+        /// Path to the public key
         #[structopt(long, short)]
         public: PathBuf,
     },
 
+    /// Paddingless decryption with RSA. You should specify the private key.
+    /// The ciphertext comes into the stdin and plain message will come into
+    /// the stdout. The message should not be bigger than modulus.
     Decrypt {
+        /// Path to the private key
         #[structopt(long, short)]
         private: PathBuf,
     },
 
+    /// Paddingless signing. You should specify the private key. The message
+    /// comes into the stdin and signature will come into stdout.
     Sign {
+        /// Path to the private key
         #[structopt(long, short)]
         private: PathBuf,
     },
 
+    /// Paddingless verification. You should specify the public key and path to
+    /// signature. The message comes into stdin. If signature is ok, prints nothing
+    /// and exits with 0.
     Verify {
+        /// The path to the public key
         #[structopt(long, short)]
         public: PathBuf,
 
+        /// Path to the signature
         #[structopt(long, short)]
         sig: PathBuf,
     },
@@ -81,11 +108,15 @@ enum RsaCmd {
 
 #[derive(Debug, structopt::StructOpt)]
 enum SymCmd {
+    /// Encrypt message with the password. Message comes into the stdin and
+    /// the ciphertext will come into stdout.
     Enc {
         #[structopt(long)]
         pass: String,
     },
 
+    /// Decrypt message with the password. Ciphertext comes into the stdin and
+    /// the message will come into stdout.
     Dec {
         #[structopt(long)]
         pass: String,
